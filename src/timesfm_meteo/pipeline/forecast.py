@@ -1,4 +1,4 @@
-from timesfm_meteo.config import Settings
+from timesfm_meteo.configs import Settings
 from timesfm_meteo.models import Location, QuantileForecast
 
 

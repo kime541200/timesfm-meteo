@@ -20,8 +20,9 @@ API、資料庫、UI 或交易自動化。
 uv sync
 ```
 
-runtime 依賴尚未定義；dev extra 目前只包含 `pytest`。若任務需要新增依賴，
-請加到 `pyproject.toml`，並讓改動維持在該任務所需範圍內。
+runtime 依賴目前包含 `httpx`、`pydantic`、`python-dotenv`、`PyYAML`；
+dev extra 目前只包含 `pytest`。若任務需要新增依賴，請加到 `pyproject.toml`，
+並讓改動維持在該任務所需範圍內。
 
 ## Development
 
@@ -47,12 +48,15 @@ Web client、Postgres 整合或 Polymarket 自動化。
 - `main.py`：repo 根目錄的薄入口，只呼叫 `timesfm_meteo.cli.main`，不要放核心邏輯。
 - `src/timesfm_meteo/`：可匯入的核心 Python package。
 - `src/timesfm_meteo/cli.py`：CLI 入口。
+- `src/timesfm_meteo/configs.py`：讀取 `.env` 與 `configs/configs.yaml`，並以 Pydantic 驗證設定。
 - `src/timesfm_meteo/models.py`：核心資料結構。
 - `src/timesfm_meteo/data_sources/`：外部資料來源，例如 Open-Meteo。
 - `src/timesfm_meteo/forecasting/`：TimesFM adapter 與 baseline forecast。
 - `src/timesfm_meteo/pipeline/`：資料抓取、預測與評估的 orchestration。
 - `src/timesfm_meteo/evaluation/`：回測與評估指標。
 - `tests/`：測試程式；不要加入 `__init__.py`。
+- `configs/configs.example.yaml`：非敏感設定範例。
+- `configs/configs.yaml`：本機 runtime 設定，預設由 `load_settings()` 讀取，不應提交。
 - `pyproject.toml`：Python 專案 metadata 與依賴設定。
 - `docs/roadmap.md`：專案目標與分階段規劃。
 - `docs/quantile-forecasting.md`：分位數預測與不確定性說明。
@@ -61,6 +65,7 @@ Web client、Postgres 整合或 Polymarket 自動化。
 
 - 使用 src-layout；所有可匯入的 production Python 模組都放在 `src/timesfm_meteo/`。
 - 不要在 repo 根目錄新增可匯入模組。根目錄只保留 `main.py` 作為薄入口。
+- 固定且非敏感設定放在 YAML；敏感設定放在 `.env`，由 `python-dotenv` 載入。
 - 新功能優先補對應測試，測試放在 `tests/`。
 
 ## Domain Notes
@@ -85,6 +90,7 @@ Web client、Postgres 整合或 Polymarket 自動化。
   模擬切換到真實交易的步驟都必須再次取得明確同意。
 - 不要把私鑰、token、交易簽名、wallet address 對應身份、或其他敏感資訊寫入
   repo、log、測試 fixture、文件、commit message 或錯誤輸出。
+- `configs/configs.yaml` 與 `.env` 都視為本機設定檔，不應提交；只提交 example 檔。
 
 ## Validation
 

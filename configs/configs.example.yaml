@@ -1,0 +1,6 @@
+open-meteo:
+  archive-api-url: https://archive-api.open-meteo.com/v1/archive
+  daily-variables:
+    - temperature_2m_max
+    - temperature_2m_min
+  default-timeout-seconds: 30.0

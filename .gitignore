@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Configuration files
+configs/configs.yaml
+
+# Environment variables
+!.env.example
+.env*

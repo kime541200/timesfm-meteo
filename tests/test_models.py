@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from timesfm_meteo.config import Settings
+from timesfm_meteo.configs import Settings
 from timesfm_meteo.models import DailyTemperature, Location, QuantileForecast
 
 

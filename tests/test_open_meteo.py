@@ -4,13 +4,17 @@ import httpx
 import pytest
 
 from timesfm_meteo.data_sources.open_meteo import (
-    ARCHIVE_API_URL,
     OpenMeteoError,
     _build_archive_params,
     _parse_daily_temperatures,
     fetch_daily_temperatures,
 )
+from timesfm_meteo.configs import OpenMeteoSettings
 from timesfm_meteo.models import Location
+
+
+def open_meteo_settings() -> OpenMeteoSettings:
+    return OpenMeteoSettings()
 
 
 def test_build_archive_params() -> None:
@@ -64,10 +68,12 @@ def test_parse_daily_temperatures_rejects_mismatched_lengths() -> None:
 
 
 def test_fetch_daily_temperatures_uses_archive_api() -> None:
+    settings = open_meteo_settings()
+
     def handler(request: httpx.Request) -> httpx.Response:
         params = request.url.params
 
-        assert str(request.url).startswith(ARCHIVE_API_URL)
+        assert str(request.url).startswith(settings.archive_api_url)
         assert params["latitude"] == "25.0"
         assert params["longitude"] == "121.5"
         assert params["start_date"] == "2022-05-01"
@@ -95,6 +101,7 @@ def test_fetch_daily_temperatures_uses_archive_api() -> None:
         2,
         end_date=date(2024, 5, 1),
         client=client,
+        settings=settings,
     )
 
     assert len(temperatures) == 1
@@ -128,6 +135,7 @@ def test_fetch_daily_temperatures_uses_explicit_start_date() -> None:
         start_date=date(2024, 4, 25),
         end_date=date(2024, 5, 1),
         client=client,
+        settings=open_meteo_settings(),
     )
 
     assert len(temperatures) == 1
@@ -162,6 +170,7 @@ def test_fetch_daily_temperatures_wraps_http_errors() -> None:
             2,
             end_date=date(2024, 5, 1),
             client=client,
+            settings=open_meteo_settings(),
         )
 
 
@@ -181,4 +190,44 @@ def test_fetch_daily_temperatures_wraps_open_meteo_error_payload() -> None:
             2,
             end_date=date(2024, 5, 1),
             client=client,
+            settings=open_meteo_settings(),
         )
+
+
+def test_fetch_daily_temperatures_uses_open_meteo_settings() -> None:
+    settings = OpenMeteoSettings(
+        archive_api_url="https://example.test/archive",
+        daily_variables=("temperature_2m_max", "temperature_2m_min", "weather_code"),
+        default_timeout_seconds=5,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+
+        assert str(request.url).startswith("https://example.test/archive")
+        assert params["daily"] == "temperature_2m_max,temperature_2m_min,weather_code"
+
+        return httpx.Response(
+            200,
+            json={
+                "daily": {
+                    "time": ["2024-05-01"],
+                    "temperature_2m_max": [29.0],
+                    "temperature_2m_min": [21.0],
+                    "weather_code": [1],
+                }
+            },
+            request=request,
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    temperatures = fetch_daily_temperatures(
+        Location(latitude=25.0, longitude=121.5),
+        start_date=date(2024, 5, 1),
+        end_date=date(2024, 5, 1),
+        client=client,
+        settings=settings,
+    )
+
+    assert len(temperatures) == 1

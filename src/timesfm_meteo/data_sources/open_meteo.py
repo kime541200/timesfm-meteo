@@ -5,11 +5,8 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from timesfm_meteo.configs import OpenMeteoSettings, load_settings
 from timesfm_meteo.models import DailyTemperature, Location
-
-ARCHIVE_API_URL = "https://archive-api.open-meteo.com/v1/archive"
-DAILY_VARIABLES = ("temperature_2m_max", "temperature_2m_min")
-DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 class OpenMeteoError(RuntimeError):
@@ -23,6 +20,7 @@ def fetch_daily_temperatures(
     start_date: Date | None = None,
     end_date: Date | None = None,
     client: httpx.Client | None = None,
+    settings: OpenMeteoSettings | None = None,
 ) -> list[DailyTemperature]:
     """Fetch historical daily temperatures from Open-Meteo.
 
@@ -39,8 +37,14 @@ def fetch_daily_temperatures(
         start_date=start_date,
         history_years=history_years,
     )
-    params = _build_archive_params(location, resolved_start_date, resolved_end_date)
-    payload = _fetch_archive_payload(params, client=client)
+    resolved_settings = settings or load_settings().open_meteo
+    params = _build_archive_params(
+        location,
+        resolved_start_date,
+        resolved_end_date,
+        settings=resolved_settings,
+    )
+    payload = _fetch_archive_payload(params, client=client, settings=resolved_settings)
     return _parse_daily_temperatures(payload)
 
 
@@ -48,16 +52,19 @@ def _build_archive_params(
     location: Location,
     start_date: Date,
     end_date: Date,
+    *,
+    settings: OpenMeteoSettings | None = None,
 ) -> dict[str, str | float]:
     if start_date > end_date:
         raise ValueError("start_date must be less than or equal to end_date")
 
+    resolved_settings = settings or OpenMeteoSettings()
     return {
         "latitude": location.latitude,
         "longitude": location.longitude,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "daily": ",".join(DAILY_VARIABLES),
+        "daily": ",".join(resolved_settings.daily_variables),
         "temperature_unit": "celsius",
         "timezone": "auto",
     }
@@ -67,13 +74,14 @@ def _fetch_archive_payload(
     params: dict[str, str | float],
     *,
     client: httpx.Client | None,
+    settings: OpenMeteoSettings,
 ) -> dict[str, Any]:
     try:
         if client is None:
-            with httpx.Client(timeout=DEFAULT_TIMEOUT_SECONDS) as local_client:
-                response = local_client.get(ARCHIVE_API_URL, params=params)
+            with httpx.Client(timeout=settings.default_timeout_seconds) as local_client:
+                response = local_client.get(settings.archive_api_url, params=params)
         else:
-            response = client.get(ARCHIVE_API_URL, params=params)
+            response = client.get(settings.archive_api_url, params=params)
 
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:

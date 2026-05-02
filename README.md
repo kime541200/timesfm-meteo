@@ -15,8 +15,25 @@
 
 ## 目前狀態
 
-此 repository 仍在規劃與 skeleton 階段。src-layout 骨架已建立，天氣資料抓取與
-預測 pipeline 尚未實作。
+此 repository 仍在規劃與 skeleton 階段。src-layout 骨架已建立，Open-Meteo
+歷史氣溫資料抓取已可用，預測 pipeline 尚未實作。
+
+## Configuration
+
+非敏感設定使用 YAML，預設讀取：
+
+```text
+configs/configs.yaml
+```
+
+可從範例建立本機設定：
+
+```bash
+cp configs/configs.example.yaml configs/configs.yaml
+```
+
+敏感設定使用 `.env`，由 `python-dotenv` 載入。`configs/configs.yaml` 與 `.env`
+不應提交。
 
 ## Development
 
