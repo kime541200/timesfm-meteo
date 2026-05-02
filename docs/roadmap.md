@@ -18,6 +18,10 @@
 
 > 官方有提供 Docker 部署服務的說明：[getting-started.md](https://github.com/open-meteo/open-meteo/blob/main/docs/getting-started.md)，其本質並不是建立一個幫你發送 HTTP 請求的代理伺服器（Proxy），而是完整複製一套與官方相同的氣象資料庫與 API 後端。它會將龐大的原始氣象模型資料下載到本機，並轉化為高度優化的時間序列資料庫來提供查詢。以目前的應用來說完全是沒有必要的。
 
+> Future client option: [open-meteo/python-requests](https://github.com/open-meteo/python-requests.git)
+> 目前 MVP 先直接呼叫 Open-Meteo JSON API。若之後需要大量地點、長時間序列、
+> cache / retry，或 NumPy / pandas / Polars 整合，再評估改用官方 Python client。
+
 ### 2. 未來 3 日氣溫預測
 
 使用 TimesFM 預測未來 3 日的氣溫範圍。

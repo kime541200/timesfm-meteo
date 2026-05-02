@@ -5,6 +5,7 @@ description = "Weather forecasting pipeline using Open-Meteo and TimesFM."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28.0",
     "pydantic>=2.12.0"
 ]
 
