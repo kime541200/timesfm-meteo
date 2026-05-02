@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,17 @@ class OpenMeteoSettings(BaseModel):
     )
 
 
+class PostgresSettings(BaseModel):
+    """PostgreSQL connection settings. DSN is read from DATABASE_URL env var."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dsn: str = Field(
+        default_factory=lambda: os.environ.get("DATABASE_URL", ""),
+        description="PostgreSQL connection string (set DATABASE_URL in .env)",
+    )
+
+
 class Settings(BaseModel):
     """Runtime settings for the local forecasting pipeline."""
 
@@ -51,6 +63,7 @@ class Settings(BaseModel):
         default_factory=OpenMeteoSettings,
         alias="open-meteo",
     )
+    postgres: PostgresSettings = Field(default_factory=PostgresSettings)
 
 
 def load_settings(

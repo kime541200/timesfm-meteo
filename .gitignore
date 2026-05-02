@@ -14,6 +14,9 @@ wheels/
 # Configuration files
 configs/configs.yaml
 
+# Postgres
+servers.json
+
 # Environment variables
-!.env.example
 .env*
+!.env.example*

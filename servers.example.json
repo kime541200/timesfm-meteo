@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "TimesFM Meteo DB",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "timesfm_meteo",
+      "Username": "kim",
+      "SSLMode": "prefer"
+    }
+  }
+}

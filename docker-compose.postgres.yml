@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    env_file:
+      - .env.postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - 5432:5432
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:9.14
+    container_name: pgadmin
+    env_file:
+      - .env.postgres
+    environment:
+      - PGADMIN_SERVER_JSON_FILE=/pgadmin4/servers.json
+      - PGADMIN_REPLACE_SERVERS_ON_STARTUP=True
+    ports:
+      - "5433:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./servers.json:/pgadmin4/servers.json
+    restart: always
+    depends_on:
+      - postgres
+
+volumes:
+  postgres-data:
+  pgadmin-data:

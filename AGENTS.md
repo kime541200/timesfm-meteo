@@ -34,6 +34,12 @@ uv run python -m timesfm_meteo
 uv run timesfm-meteo
 ```
 
+抓取歷史氣溫（會自動使用 Postgres 快取，缺漏日期才呼叫 Open-Meteo 並回寫）：
+
+```bash
+uv run timesfm-meteo fetch-history --latitude 25.05 --longitude 121.57 --years 2
+```
+
 早期實作順序：
 1. Open-Meteo 歷史每日資料 fetcher。
 2. TimesFM 輸入所需的 time-series 正規化。
