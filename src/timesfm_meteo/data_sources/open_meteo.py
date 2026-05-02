@@ -18,22 +18,28 @@ class OpenMeteoError(RuntimeError):
 
 def fetch_daily_temperatures(
     location: Location,
-    history_years: int,
+    history_years: int | None = None,
     *,
+    start_date: Date | None = None,
     end_date: Date | None = None,
     client: httpx.Client | None = None,
 ) -> list[DailyTemperature]:
     """Fetch historical daily temperatures from Open-Meteo.
 
     The default end date is yesterday because today's daily aggregate may not be
-    complete yet.
+    complete yet. If start_date is not provided, history_years is used to derive
+    it from the resolved end date.
     """
-    if history_years < 1:
+    if history_years is not None and history_years < 1:
         raise ValueError("history_years must be greater than or equal to 1")
 
     resolved_end_date = end_date or Date.today() - timedelta(days=1)
-    start_date = _subtract_years(resolved_end_date, history_years)
-    params = _build_archive_params(location, start_date, resolved_end_date)
+    resolved_start_date = _resolve_start_date(
+        resolved_end_date,
+        start_date=start_date,
+        history_years=history_years,
+    )
+    params = _build_archive_params(location, resolved_start_date, resolved_end_date)
     payload = _fetch_archive_payload(params, client=client)
     return _parse_daily_temperatures(payload)
 
@@ -129,6 +135,19 @@ def _daily_values(daily: dict[str, Any], key: str) -> list[Any]:
     if not isinstance(values, list):
         raise OpenMeteoError(f"Open-Meteo daily data is missing {key}")
     return values
+
+
+def _resolve_start_date(
+    end_date: Date,
+    *,
+    start_date: Date | None,
+    history_years: int | None,
+) -> Date:
+    if start_date is not None:
+        return start_date
+    if history_years is None:
+        raise ValueError("Either start_date or history_years must be provided")
+    return _subtract_years(end_date, history_years)
 
 
 def _subtract_years(value: Date, years: int) -> Date:

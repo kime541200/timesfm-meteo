@@ -102,6 +102,54 @@ def test_fetch_daily_temperatures_uses_archive_api() -> None:
     assert temperatures[0].temperature_min == 21.0
 
 
+def test_fetch_daily_temperatures_uses_explicit_start_date() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+
+        assert params["start_date"] == "2024-04-25"
+        assert params["end_date"] == "2024-05-01"
+
+        return httpx.Response(
+            200,
+            json={
+                "daily": {
+                    "time": ["2024-05-01"],
+                    "temperature_2m_max": [29.0],
+                    "temperature_2m_min": [21.0],
+                }
+            },
+            request=request,
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    temperatures = fetch_daily_temperatures(
+        Location(latitude=25.0, longitude=121.5),
+        start_date=date(2024, 4, 25),
+        end_date=date(2024, 5, 1),
+        client=client,
+    )
+
+    assert len(temperatures) == 1
+
+
+def test_fetch_daily_temperatures_rejects_missing_start_strategy() -> None:
+    with pytest.raises(ValueError, match="start_date or history_years"):
+        fetch_daily_temperatures(
+            Location(latitude=25.0, longitude=121.5),
+            end_date=date(2024, 5, 1),
+        )
+
+
+def test_fetch_daily_temperatures_rejects_start_date_after_end_date() -> None:
+    with pytest.raises(ValueError, match="start_date"):
+        fetch_daily_temperatures(
+            Location(latitude=25.0, longitude=121.5),
+            start_date=date(2024, 5, 2),
+            end_date=date(2024, 5, 1),
+        )
+
+
 def test_fetch_daily_temperatures_wraps_http_errors() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": True}, request=request)
