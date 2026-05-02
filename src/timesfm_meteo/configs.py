@@ -37,6 +37,40 @@ class OpenMeteoSettings(BaseModel):
     )
 
 
+class TimesFMSettings(BaseModel):
+    """TimesFM model settings.
+
+    The model architecture allows up to context=16384 and horizon=1000;
+    project defaults are tighter — see docs/timesfm-engine.md for rationale.
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    model_id: str = Field(
+        "google/timesfm-2.5-200m-pytorch",
+        alias="model-id",
+        description="HuggingFace model identifier",
+    )
+    max_context: int = Field(
+        1024,
+        alias="max-context",
+        ge=1,
+        le=16384,
+        description="Maximum input series length the compiled graph supports",
+    )
+    max_horizon: int = Field(
+        32,
+        alias="max-horizon",
+        ge=1,
+        le=1000,
+        description="Maximum forecast horizon the compiled graph supports",
+    )
+    normalize_inputs: bool = Field(True, alias="normalize-inputs")
+    use_continuous_quantile_head: bool = Field(True, alias="use-continuous-quantile-head")
+    force_flip_invariance: bool = Field(True, alias="force-flip-invariance")
+    fix_quantile_crossing: bool = Field(True, alias="fix-quantile-crossing")
+
+
 class PostgresSettings(BaseModel):
     """PostgreSQL connection settings. DSN is read from DATABASE_URL env var."""
 
@@ -55,15 +89,12 @@ class Settings(BaseModel):
 
     history_years: int = Field(2, ge=1, le=100, description="Number of years of historical data to load")
     forecast_days: int = Field(3, ge=1, le=365, description="Number of days to forecast")
-    forecast_quantiles: tuple[float, ...] = Field(
-        (0.1, 0.5, 0.9),
-        description="Quantiles to forecast",
-    )
     open_meteo: OpenMeteoSettings = Field(
         default_factory=OpenMeteoSettings,
         alias="open-meteo",
     )
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    timesfm: TimesFMSettings = Field(default_factory=TimesFMSettings)
 
 
 def load_settings(

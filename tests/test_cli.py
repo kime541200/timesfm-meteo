@@ -1,14 +1,32 @@
+from datetime import date
+
+import numpy as np
 import pytest
 
 from timesfm_meteo.cli import main
-from timesfm_meteo.configs import OpenMeteoSettings, PostgresSettings, Settings
+from timesfm_meteo.configs import (
+    OpenMeteoSettings,
+    PostgresSettings,
+    Settings,
+    TimesFMSettings,
+)
+from timesfm_meteo.models import (
+    DailyTemperature,
+    ForecastResponse,
+    QuantileForecastResult,
+)
+from timesfm_meteo.pipeline.historical import FetchResult
 
 
-def _make_settings(dsn: str) -> Settings:
+def _make_settings(dsn: str = "") -> Settings:
     return Settings(
         postgres=PostgresSettings(dsn=dsn),
         open_meteo=OpenMeteoSettings(),
+        timesfm=TimesFMSettings(),
     )
+
+
+# ---------- fetch-history tests ----------
 
 
 def test_parser_rejects_simultaneous_years_and_start_date(capsys):
@@ -86,3 +104,148 @@ def test_missing_database_url_exits_without_external_calls(monkeypatch, capsys):
     )
     assert rc == 2
     assert "DATABASE_URL is not configured" in capsys.readouterr().err
+
+
+# ---------- forecast tests ----------
+
+
+class _FakeEngine:
+    def forecast(self, series_list, horizon):
+        return [
+            QuantileForecastResult(
+                horizon=horizon,
+                point=[26.0 + i for i in range(horizon)],
+                quantiles={
+                    q: [26.0 + i + (q - 0.5) * 4 for i in range(horizon)]
+                    for q in (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+                },
+            ),
+            QuantileForecastResult(
+                horizon=horizon,
+                point=[18.0 + i for i in range(horizon)],
+                quantiles={
+                    q: [18.0 + i + (q - 0.5) * 4 for i in range(horizon)]
+                    for q in (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+                },
+            ),
+        ]
+
+
+def _fake_history(days: int) -> list[DailyTemperature]:
+    return [
+        DailyTemperature(
+            date=date(2026, 1, 1),
+            temperature_max=22.0 + (i % 5),
+            temperature_min=15.0 + (i % 4),
+        )
+        for i in range(days)
+    ]
+
+
+def test_forecast_invalid_latitude_returns_exit_code_2(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "timesfm_meteo.cli.load_settings",
+        lambda: _make_settings("postgresql://placeholder"),
+    )
+    rc = main(["forecast", "--latitude", "95.0", "--longitude", "121.57"])
+    assert rc == 2
+    assert "latitude" in capsys.readouterr().err.lower()
+
+
+def test_forecast_missing_database_url_does_not_load_model(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings", lambda: _make_settings(""))
+
+    def fail_engine(_settings):
+        raise AssertionError("TimesFMEngine must not be constructed when DSN is empty")
+
+    def fail_psycopg(*args, **kwargs):
+        raise AssertionError("psycopg.connect must not be called when DSN is empty")
+
+    monkeypatch.setattr("timesfm_meteo.cli._build_engine", fail_engine)
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", fail_psycopg)
+
+    rc = main(["forecast", "--latitude", "25.05", "--longitude", "121.57"])
+    assert rc == 2
+    assert "DATABASE_URL is not configured" in capsys.readouterr().err
+
+
+def test_forecast_happy_path_emits_valid_json(monkeypatch, capsys):
+    settings = _make_settings("postgresql://placeholder")
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings", lambda: settings)
+
+    history = _fake_history(60)
+
+    class _FakeConnCtx:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtx())
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr(
+        "timesfm_meteo.cli.get_temperatures",
+        lambda *args, **kwargs: FetchResult(rows=history, cached_count=60, fetched_count=0),
+    )
+    monkeypatch.setattr("timesfm_meteo.cli._build_engine", lambda settings: _FakeEngine())
+
+    rc = main(
+        [
+            "forecast",
+            "--latitude", "25.05",
+            "--longitude", "121.57",
+            "--horizon", "3",
+            "--start-date", "2026-05-03",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert rc == 0
+
+    response = ForecastResponse.model_validate_json(captured.out)
+    assert response.model == settings.timesfm.model_id
+    assert response.horizon == 3
+    assert response.history_days == 60
+    assert len(response.forecasts) == 3
+    assert response.forecasts[0].date == date(2026, 5, 3)
+    assert response.forecasts[2].date == date(2026, 5, 5)
+    assert "history=60" in captured.err
+    assert "horizon=3" in captured.err
+    assert settings.timesfm.model_id in captured.err
+
+
+def test_forecast_uses_settings_defaults(monkeypatch, capsys):
+    settings = _make_settings("postgresql://placeholder")
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings", lambda: settings)
+
+    captured_args: dict = {}
+
+    class _FakeConnCtx:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtx())
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+
+    def capture_get_temperatures(location, start, end, conn, om_settings):
+        captured_args["history_start"] = start
+        captured_args["history_end"] = end
+        return FetchResult(rows=_fake_history(60), cached_count=60, fetched_count=0)
+
+    monkeypatch.setattr("timesfm_meteo.cli.get_temperatures", capture_get_temperatures)
+    monkeypatch.setattr("timesfm_meteo.cli._build_engine", lambda settings: _FakeEngine())
+
+    rc = main(["forecast", "--latitude", "25.05", "--longitude", "121.57", "--start-date", "2026-05-03"])
+    captured = capsys.readouterr()
+    assert rc == 0
+
+    response = ForecastResponse.model_validate_json(captured.out)
+    # 預設來自 settings.forecast_days=3
+    assert response.horizon == 3
+    # 預設 history_years=2 → history_end = start_date - 1 = 2026-05-02
+    assert captured_args["history_end"] == date(2026, 5, 2)
+    # history_start = 2026-05-02 往前 2 年
+    assert captured_args["history_start"] == date(2024, 5, 2)

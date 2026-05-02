@@ -3,7 +3,12 @@ import os
 
 import pytest
 
-from timesfm_meteo.configs import OpenMeteoSettings, Settings, load_settings
+from timesfm_meteo.configs import (
+    OpenMeteoSettings,
+    Settings,
+    TimesFMSettings,
+    load_settings,
+)
 
 
 def test_load_settings_from_yaml(tmp_path: Path) -> None:
@@ -13,16 +18,17 @@ def test_load_settings_from_yaml(tmp_path: Path) -> None:
         """
 history_years: 3
 forecast_days: 5
-forecast_quantiles:
-  - 0.1
-  - 0.5
-  - 0.9
 open-meteo:
   archive-api-url: https://example.test/archive
   daily-variables:
     - temperature_2m_max
     - temperature_2m_min
   default-timeout-seconds: 12.5
+timesfm:
+  model-id: google/timesfm-1.0-200m-pytorch
+  max-context: 2048
+  max-horizon: 64
+  normalize-inputs: false
 """.strip(),
         encoding="utf-8",
     )
@@ -31,13 +37,46 @@ open-meteo:
 
     assert settings.history_years == 3
     assert settings.forecast_days == 5
-    assert settings.forecast_quantiles == (0.1, 0.5, 0.9)
     assert settings.open_meteo.archive_api_url == "https://example.test/archive"
     assert settings.open_meteo.daily_variables == (
         "temperature_2m_max",
         "temperature_2m_min",
     )
     assert settings.open_meteo.default_timeout_seconds == 12.5
+    assert settings.timesfm.model_id == "google/timesfm-1.0-200m-pytorch"
+    assert settings.timesfm.max_context == 2048
+    assert settings.timesfm.max_horizon == 64
+    assert settings.timesfm.normalize_inputs is False
+
+
+def test_timesfm_settings_defaults() -> None:
+    settings = TimesFMSettings()
+
+    assert settings.model_id == "google/timesfm-2.5-200m-pytorch"
+    assert settings.max_context == 1024
+    assert settings.max_horizon == 32
+    assert settings.normalize_inputs is True
+    assert settings.use_continuous_quantile_head is True
+    assert settings.force_flip_invariance is True
+    assert settings.fix_quantile_crossing is True
+
+
+def test_timesfm_settings_accepts_aliases() -> None:
+    settings = TimesFMSettings.model_validate(
+        {
+            "model-id": "custom/model",
+            "max-context": 512,
+            "max-horizon": 16,
+            "normalize-inputs": False,
+            "use-continuous-quantile-head": False,
+            "force-flip-invariance": False,
+            "fix-quantile-crossing": False,
+        }
+    )
+
+    assert settings.model_id == "custom/model"
+    assert settings.max_context == 512
+    assert settings.normalize_inputs is False
 
 
 def test_load_settings_uses_defaults_when_yaml_is_missing(tmp_path: Path) -> None:

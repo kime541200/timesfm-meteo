@@ -4,3 +4,12 @@ open-meteo:
     - temperature_2m_max
     - temperature_2m_min
   default-timeout-seconds: 30.0
+
+timesfm:
+  model-id: google/timesfm-2.5-200m-pytorch
+  max-context: 1024
+  max-horizon: 32
+  normalize-inputs: true
+  use-continuous-quantile-head: true
+  force-flip-invariance: true
+  fix-quantile-crossing: true

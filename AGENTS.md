@@ -20,9 +20,15 @@ API、資料庫、UI 或交易自動化。
 uv sync
 ```
 
-runtime 依賴目前包含 `httpx`、`pydantic`、`python-dotenv`、`PyYAML`；
-dev extra 目前只包含 `pytest`。若任務需要新增依賴，請加到 `pyproject.toml`，
-並讓改動維持在該任務所需範圍內。
+runtime 依賴目前包含 `httpx`、`psycopg`、`pydantic`、`python-dotenv`、`PyYAML`；
+dev extra 包含 `pytest`；`forecast` extra 包含 `timesfm[torch]` 與 `numpy`。
+若任務需要新增依賴，請加到 `pyproject.toml`，並讓改動維持在該任務所需範圍內。
+
+執行 `forecast` 子命令需要額外安裝 forecast extra：
+
+```bash
+uv sync --extra forecast
+```
 
 ## Development
 
@@ -38,6 +44,12 @@ uv run timesfm-meteo
 
 ```bash
 uv run timesfm-meteo fetch-history --latitude 25.05 --longitude 121.57 --years 2
+```
+
+預測未來氣溫（需要先 `uv sync --extra forecast`；輸出為 `ForecastResponse` JSON）：
+
+```bash
+uv run timesfm-meteo forecast --latitude 25.05 --longitude 121.57 --horizon 3
 ```
 
 早期實作順序：
