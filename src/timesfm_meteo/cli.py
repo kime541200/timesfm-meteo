@@ -7,9 +7,11 @@ import psycopg
 from pydantic import ValidationError
 
 from timesfm_meteo.configs import Settings, load_settings
+from timesfm_meteo.db.forecasts import ensure_schema_forecasts, upsert_forecasts
 from timesfm_meteo.db.repository import ensure_schema
+from timesfm_meteo.evaluation.orchestrator import evaluate_forecasts
 from timesfm_meteo.forecasting.timesfm import forecast_with_timesfm
-from timesfm_meteo.models import ForecastResponse, Location
+from timesfm_meteo.models import EvaluationReport, ForecastResponse, Location
 from timesfm_meteo.pipeline.historical import get_temperatures
 
 
@@ -36,29 +38,44 @@ def _build_parser() -> argparse.ArgumentParser:
     date_group.add_argument("--years", type=int)
     date_group.add_argument("--start-date", type=_parse_iso_date)
 
-    forecast = subparsers.add_parser(
+    forecast_cmd = subparsers.add_parser(
         "forecast",
         help="Forecast future daily max/min temperatures with TimesFM.",
     )
-    forecast.add_argument("--latitude", type=float, required=True)
-    forecast.add_argument("--longitude", type=float, required=True)
-    forecast.add_argument(
+    forecast_cmd.add_argument("--latitude", type=float, required=True)
+    forecast_cmd.add_argument("--longitude", type=float, required=True)
+    forecast_cmd.add_argument(
         "--horizon",
         type=int,
         default=None,
         help="Forecast horizon in days. Defaults to settings.forecast_days.",
     )
-    forecast.add_argument(
+    forecast_cmd.add_argument(
         "--history-years",
         type=int,
         default=None,
         help="Years of history to feed the model. Defaults to settings.history_years.",
     )
-    forecast.add_argument(
+    forecast_cmd.add_argument(
         "--start-date",
         type=_parse_iso_date,
         default=None,
         help="First date to forecast. Defaults to today; setting a past date enables backtest.",
+    )
+
+    evaluate_cmd = subparsers.add_parser(
+        "evaluate",
+        help="Evaluate stored forecasts against observed temperatures.",
+    )
+    evaluate_cmd.add_argument("--latitude", type=float, required=True)
+    evaluate_cmd.add_argument("--longitude", type=float, required=True)
+    evaluate_cmd.add_argument("--start-date-from", type=_parse_iso_date, required=True)
+    evaluate_cmd.add_argument("--start-date-to", type=_parse_iso_date, required=True)
+    evaluate_cmd.add_argument(
+        "--horizon-step",
+        type=int,
+        default=None,
+        help="Restrict evaluation to a single horizon step (target_date - start_date in days).",
     )
 
     return parser
@@ -169,6 +186,7 @@ def _run_forecast(args: argparse.Namespace, settings: Settings) -> int:
     try:
         with psycopg.connect(settings.postgres.dsn) as conn:
             ensure_schema(conn)
+            ensure_schema_forecasts(conn)
             history_result = get_temperatures(
                 location,
                 history_start,
@@ -176,12 +194,15 @@ def _run_forecast(args: argparse.Namespace, settings: Settings) -> int:
                 conn,
                 settings.open_meteo,
             )
+            engine = _build_engine(settings)
+            forecasts = forecast_with_timesfm(history_result.rows, forecast_dates, engine)
+            upsert_forecasts(
+                conn, location, start_date, forecasts,
+                settings.timesfm.model_id, len(history_result.rows),
+            )
     except psycopg.OperationalError as exc:
         print(f"database connection failed: {exc}", file=sys.stderr)
         return 2
-
-    engine = _build_engine(settings)
-    forecasts = forecast_with_timesfm(history_result.rows, forecast_dates, engine)
 
     response = ForecastResponse(
         model=settings.timesfm.model_id,
@@ -197,6 +218,54 @@ def _run_forecast(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _run_evaluate(args: argparse.Namespace, settings: Settings) -> int:
+    try:
+        location = Location(latitude=args.latitude, longitude=args.longitude)
+    except ValidationError as exc:
+        print(f"invalid location: {exc}", file=sys.stderr)
+        return 2
+
+    start_date_from: Date = args.start_date_from
+    start_date_to: Date = args.start_date_to
+    if start_date_from > start_date_to:
+        print("--start-date-from must be on or before --start-date-to", file=sys.stderr)
+        return 2
+
+    if not settings.postgres.dsn:
+        print("DATABASE_URL is not configured. Set it in .env.", file=sys.stderr)
+        return 2
+
+    try:
+        with psycopg.connect(settings.postgres.dsn) as conn:
+            ensure_schema(conn)
+            ensure_schema_forecasts(conn)
+            report = evaluate_forecasts(
+                location,
+                start_date_from,
+                start_date_to,
+                args.horizon_step,
+                conn,
+                settings.open_meteo,
+            )
+    except psycopg.OperationalError as exc:
+        print(f"database connection failed: {exc}", file=sys.stderr)
+        return 2
+
+    if report.overall.evaluated_count == 0 and report.overall.pending_count == 0:
+        print("evaluated=0 pending=0 (no forecasts in range)", file=sys.stderr)
+    else:
+        horizon_label = str(args.horizon_step) if args.horizon_step is not None else "any"
+        print(
+            f"evaluated={report.overall.evaluated_count} "
+            f"pending={report.overall.pending_count} "
+            f"horizon_step={horizon_label}",
+            file=sys.stderr,
+        )
+
+    print(report.model_dump_json(indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the project command-line entry point."""
     parser = _build_parser()
@@ -208,5 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run_fetch_history(args, settings)
     if args.command == "forecast":
         return _run_forecast(args, settings)
+    if args.command == "evaluate":
+        return _run_evaluate(args, settings)
     parser.error(f"unknown command: {args.command}")
     return 2

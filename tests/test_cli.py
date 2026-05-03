@@ -12,7 +12,9 @@ from timesfm_meteo.configs import (
 )
 from timesfm_meteo.models import (
     DailyTemperature,
+    EvaluationReport,
     ForecastResponse,
+    GroupMetrics,
     QuantileForecastResult,
 )
 from timesfm_meteo.pipeline.historical import FetchResult
@@ -184,11 +186,13 @@ def test_forecast_happy_path_emits_valid_json(monkeypatch, capsys):
 
     monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtx())
     monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema_forecasts", lambda conn: None)
     monkeypatch.setattr(
         "timesfm_meteo.cli.get_temperatures",
         lambda *args, **kwargs: FetchResult(rows=history, cached_count=60, fetched_count=0),
     )
     monkeypatch.setattr("timesfm_meteo.cli._build_engine", lambda settings: _FakeEngine())
+    monkeypatch.setattr("timesfm_meteo.cli.upsert_forecasts", lambda *a, **kw: None)
 
     rc = main(
         [
@@ -229,6 +233,8 @@ def test_forecast_uses_settings_defaults(monkeypatch, capsys):
 
     monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtx())
     monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema_forecasts", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.upsert_forecasts", lambda *a, **kw: None)
 
     def capture_get_temperatures(location, start, end, conn, om_settings):
         captured_args["history_start"] = start
@@ -249,3 +255,164 @@ def test_forecast_uses_settings_defaults(monkeypatch, capsys):
     assert captured_args["history_end"] == date(2026, 5, 2)
     # history_start = 2026-05-02 往前 2 年
     assert captured_args["history_start"] == date(2024, 5, 2)
+
+
+def test_forecast_happy_path_persists_forecasts(monkeypatch, capsys):
+    """Dedicated test: verifies upsert_forecasts is called with correct args."""
+    settings = _make_settings("postgresql://placeholder")
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings", lambda: settings)
+
+    history = _fake_history(60)
+    upsert_calls: list[dict] = []
+
+    class _FakeConnCtx:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *args):
+            return False
+
+    def capture_upsert(conn, location, start_date, forecasts, model_id, history_days):
+        upsert_calls.append(
+            {"location": location, "start_date": start_date, "n_forecasts": len(forecasts),
+             "model_id": model_id, "history_days": history_days}
+        )
+
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtx())
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema_forecasts", lambda conn: None)
+    monkeypatch.setattr(
+        "timesfm_meteo.cli.get_temperatures",
+        lambda *args, **kwargs: FetchResult(rows=history, cached_count=60, fetched_count=0),
+    )
+    monkeypatch.setattr("timesfm_meteo.cli._build_engine", lambda settings: _FakeEngine())
+    monkeypatch.setattr("timesfm_meteo.cli.upsert_forecasts", capture_upsert)
+
+    main([
+        "forecast", "--latitude", "25.05", "--longitude", "121.57",
+        "--horizon", "3", "--start-date", "2026-05-03",
+    ])
+
+    assert len(upsert_calls) == 1
+    call = upsert_calls[0]
+    assert call["start_date"] == date(2026, 5, 3)
+    assert call["n_forecasts"] == 3
+    assert call["model_id"] == settings.timesfm.model_id
+    assert call["history_days"] == 60
+
+
+# ---------- evaluate tests ----------
+
+
+class _FakeConnCtxEval:
+    def __enter__(self):
+        return object()
+
+    def __exit__(self, *args):
+        return False
+
+
+def _empty_report() -> EvaluationReport:
+    from timesfm_meteo.models import Location
+    return EvaluationReport(
+        location=Location(latitude=25.05, longitude=121.57),
+        start_date_from=date(2099, 1, 1),
+        start_date_to=date(2099, 1, 31),
+        horizon_step_filter=None,
+        by_horizon_step=[],
+        overall=GroupMetrics(evaluated_count=0, pending_count=0, max=None, min=None),
+    )
+
+
+def _eval_report_with_data() -> EvaluationReport:
+    from timesfm_meteo.models import GroupMetrics, HorizonStepReport, Location, VariableMetrics
+    vm = VariableMetrics(mae_p50=1.2, interval_coverage=0.85, mean_interval_width=4.0)
+    gm = GroupMetrics(evaluated_count=30, pending_count=0, max=vm, min=vm)
+    return EvaluationReport(
+        location=Location(latitude=25.05, longitude=121.57),
+        start_date_from=date(2024, 6, 1),
+        start_date_to=date(2024, 6, 30),
+        horizon_step_filter=None,
+        by_horizon_step=[HorizonStepReport(horizon_step=0, metrics=gm)],
+        overall=gm,
+    )
+
+
+def test_evaluate_invalid_latitude_returns_exit_code_2(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings",
+                        lambda: _make_settings("postgresql://placeholder"))
+    rc = main([
+        "evaluate", "--latitude", "95.0", "--longitude", "121.57",
+        "--start-date-from", "2024-06-01", "--start-date-to", "2024-06-30",
+    ])
+    assert rc == 2
+    assert "latitude" in capsys.readouterr().err.lower()
+
+
+def test_evaluate_missing_database_url_does_not_call_anything(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings", lambda: _make_settings(""))
+
+    def fail_connect(*a, **kw):
+        raise AssertionError("psycopg.connect must not be called when DSN is empty")
+
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", fail_connect)
+
+    rc = main([
+        "evaluate", "--latitude", "25.05", "--longitude", "121.57",
+        "--start-date-from", "2024-06-01", "--start-date-to", "2024-06-30",
+    ])
+    assert rc == 2
+    assert "DATABASE_URL is not configured" in capsys.readouterr().err
+
+
+def test_evaluate_rejects_inverted_date_range(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings",
+                        lambda: _make_settings("postgresql://placeholder"))
+    rc = main([
+        "evaluate", "--latitude", "25.05", "--longitude", "121.57",
+        "--start-date-from", "2024-06-30", "--start-date-to", "2024-06-01",
+    ])
+    assert rc == 2
+    assert "start-date-from" in capsys.readouterr().err.lower() or "before" in capsys.readouterr().err.lower()
+
+
+def test_evaluate_no_forecasts_exits_zero(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings",
+                        lambda: _make_settings("postgresql://placeholder"))
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtxEval())
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema_forecasts", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.evaluate_forecasts", lambda *a, **kw: _empty_report())
+
+    rc = main([
+        "evaluate", "--latitude", "25.05", "--longitude", "121.57",
+        "--start-date-from", "2099-01-01", "--start-date-to", "2099-01-31",
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "no forecasts in range" in captured.err.lower()
+    report = EvaluationReport.model_validate_json(captured.out)
+    assert report.by_horizon_step == []
+    assert report.overall.evaluated_count == 0
+
+
+def test_evaluate_happy_path_emits_valid_json(monkeypatch, capsys):
+    monkeypatch.setattr("timesfm_meteo.cli.load_settings",
+                        lambda: _make_settings("postgresql://placeholder"))
+    monkeypatch.setattr("timesfm_meteo.cli.psycopg.connect", lambda *a, **kw: _FakeConnCtxEval())
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.ensure_schema_forecasts", lambda conn: None)
+    monkeypatch.setattr("timesfm_meteo.cli.evaluate_forecasts", lambda *a, **kw: _eval_report_with_data())
+
+    rc = main([
+        "evaluate", "--latitude", "25.05", "--longitude", "121.57",
+        "--start-date-from", "2024-06-01", "--start-date-to", "2024-06-30",
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0
+
+    report = EvaluationReport.model_validate_json(captured.out)
+    assert report.overall.evaluated_count == 30
+    assert len(report.by_horizon_step) == 1
+    assert "evaluated=30" in captured.err
+    assert "horizon_step=any" in captured.err

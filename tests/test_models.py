@@ -7,9 +7,13 @@ from timesfm_meteo.configs import Settings
 from timesfm_meteo.models import (
     DailyTemperature,
     DailyTemperatureForecast,
+    EvaluationReport,
+    GroupMetrics,
+    HorizonStepReport,
     Location,
     QuantileForecastResult,
     QuantileValues,
+    VariableMetrics,
 )
 
 
@@ -90,6 +94,48 @@ def test_quantile_forecast_result_round_trip_json() -> None:
     )
     rebuilt = QuantileForecastResult.model_validate_json(result.model_dump_json())
     assert rebuilt == result
+
+
+def test_variable_metrics_deserializes() -> None:
+    vm = VariableMetrics(mae_p50=1.5, interval_coverage=0.82, mean_interval_width=4.2)
+    rebuilt = VariableMetrics.model_validate_json(vm.model_dump_json())
+    assert rebuilt == vm
+
+
+def test_group_metrics_accepts_none_max_min() -> None:
+    gm = GroupMetrics(evaluated_count=0, pending_count=3, max=None, min=None)
+    assert gm.max is None
+    assert gm.min is None
+    rebuilt = GroupMetrics.model_validate_json(gm.model_dump_json())
+    assert rebuilt == gm
+
+
+def test_evaluation_report_json_round_trip() -> None:
+    report = EvaluationReport(
+        location=Location(latitude=25.05, longitude=121.57),
+        start_date_from=date(2024, 6, 1),
+        start_date_to=date(2024, 6, 30),
+        horizon_step_filter=None,
+        by_horizon_step=[
+            HorizonStepReport(
+                horizon_step=0,
+                metrics=GroupMetrics(
+                    evaluated_count=30,
+                    pending_count=0,
+                    max=VariableMetrics(mae_p50=1.2, interval_coverage=0.83, mean_interval_width=4.0),
+                    min=VariableMetrics(mae_p50=0.9, interval_coverage=0.87, mean_interval_width=3.5),
+                ),
+            )
+        ],
+        overall=GroupMetrics(
+            evaluated_count=30,
+            pending_count=0,
+            max=VariableMetrics(mae_p50=1.2, interval_coverage=0.83, mean_interval_width=4.0),
+            min=VariableMetrics(mae_p50=0.9, interval_coverage=0.87, mean_interval_width=3.5),
+        ),
+    )
+    rebuilt = EvaluationReport.model_validate_json(report.model_dump_json())
+    assert rebuilt == report
 
 
 def test_settings_has_pipeline_defaults() -> None:

@@ -20,3 +20,7 @@ servers.json
 # Environment variables
 .env*
 !.env.example*
+
+# Model cache and logs
+hub/
+xet/

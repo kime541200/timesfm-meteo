@@ -46,10 +46,17 @@ uv run timesfm-meteo
 uv run timesfm-meteo fetch-history --latitude 25.05 --longitude 121.57 --years 2
 ```
 
-預測未來氣溫（需要先 `uv sync --extra forecast`；輸出為 `ForecastResponse` JSON）：
+預測未來氣溫（需要先 `uv sync --extra forecast`；輸出為 `ForecastResponse` JSON；預測結果會自動寫進 `forecasts` 表）：
 
 ```bash
 uv run timesfm-meteo forecast --latitude 25.05 --longitude 121.57 --horizon 3
+```
+
+評估儲存的預測與觀測值（輸出為 `EvaluationReport` JSON；`--horizon-step` 選填）：
+
+```bash
+uv run timesfm-meteo evaluate --latitude 25.05 --longitude 121.57 \
+    --start-date-from 2024-06-01 --start-date-to 2024-06-30
 ```
 
 早期實作順序：

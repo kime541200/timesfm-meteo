@@ -79,3 +79,38 @@ class ForecastResponse(ProjectModel):
     history_days: int = Field(..., ge=0, description="Number of historical days fed to the model")
     horizon: int = Field(..., gt=0, description="Number of forecast days produced")
     forecasts: list[DailyTemperatureForecast] = Field(..., description="Per-day forecasts ordered by date")
+
+
+class VariableMetrics(ProjectModel):
+    """MAE / coverage / width for a single temperature variable (max or min)."""
+
+    mae_p50: float = Field(..., description="Mean absolute error using p50 as the point prediction")
+    interval_coverage: float = Field(..., ge=0.0, le=1.0, description="Fraction of actuals within [p10, p90]")
+    mean_interval_width: float = Field(..., description="Mean of (p90 - p10) across evaluated rows")
+
+
+class GroupMetrics(ProjectModel):
+    """Evaluation summary for one group of forecasts (a horizon step or overall)."""
+
+    evaluated_count: int = Field(..., ge=0, description="Rows where an actual was available for comparison")
+    pending_count: int = Field(..., ge=0, description="Rows where the actual is not yet available")
+    max: VariableMetrics | None = Field(None, description="Max-temperature metrics; None when evaluated_count is 0")
+    min: VariableMetrics | None = Field(None, description="Min-temperature metrics; None when evaluated_count is 0")
+
+
+class HorizonStepReport(ProjectModel):
+    """Evaluation metrics for a single horizon step (target_date - start_date in days)."""
+
+    horizon_step: int = Field(..., ge=0)
+    metrics: GroupMetrics
+
+
+class EvaluationReport(ProjectModel):
+    """CLI-level evaluation report returned by the evaluate command."""
+
+    location: Location
+    start_date_from: Date
+    start_date_to: Date
+    horizon_step_filter: int | None = Field(None, description="Value of --horizon-step if given; None means all steps")
+    by_horizon_step: list[HorizonStepReport] = Field(..., description="Per-step breakdown, ordered by step ascending")
+    overall: GroupMetrics = Field(..., description="Aggregated metrics across all selected steps")
