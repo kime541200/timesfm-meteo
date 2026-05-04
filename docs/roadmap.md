@@ -90,15 +90,20 @@
 
 > Web client（前端 SPA）獨立成「中期 3. 數據可視化」這個 change，避免 Python / Node 兩套工具鏈擠在同一個 change。
 
-### 2. Docker 包裝服務
+### 2. Docker 包裝服務 (Not Started)
 
 把服務用 Dockerfile、docker-compose 包裝。
+
+目前狀態：
+- 已有 `docker-compose.postgres.yml` 可單獨啟動 Postgres / pgAdmin。
+- API server、Web UI 的 Dockerfile 與完整 `docker-compose.yml` 尚未落地。
+- production 靜態檔 serve 與整體部署流程仍待後續 change。
 
 ### 3. 數據可視化 (In Progress)
 
 提供一個 React + Vite Web Dashboard，讓使用者能夠以視覺化方式檢視歷史氣溫、過往預測結果、預測區間與評估指標，而不需要靠 stdout JSON 自己拼。
 
-目前實作方向（change: `add-web-client` + `fix-web-forecast-semantics`）：
+目前已完成（change: `add-web-client` + `fix-web-forecast-semantics`）：
 - 前端 Dashboard：歷史氣溫折線圖、過往 forecast p50 預測點 / 淡線、p10–p90 區間、聚合平均線。
 - 主圖以 `target_date` 為 X 軸；actual history 顯示到 `History end`，未來 forecast 由 `History end + 1 day` 開始接續。
 - `Forecast horizon` 與 `Evaluation horizon step` 明確拆開：前者控制 `Run Forecast` 未來天數，後者只影響過往 forecast analysis / evaluation。
@@ -106,6 +111,10 @@
 - 手動操作：Fetch History / Run Forecast 按鈕會呼叫 API server 建立 async job，並在 job 完成後自動 refetch 圖表與評估資料。
 - 技術選型：React + Vite + TypeScript、ECharts、TanStack Query、Vitest。
 - 第一版仍以 latitude / longitude 輸入，預設 Taipei；地點 alias 另列 Additional feature。
+
+尚未完成：
+- production 靜態檔 serve。
+- 與 Docker 包裝整合的部署流程。
 
 依賴：使用「中期 1. RESTful API Server」提供的 `/api/*` endpoints；production 靜態檔 serve 與 Docker 包裝留到後續 change。
 
