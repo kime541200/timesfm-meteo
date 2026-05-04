@@ -39,7 +39,7 @@ def _run_forecast_sync(
 
         history_end = start_date - dt.timedelta(days=1)
         history_start = history_end.replace(year=history_end.year - history_years)
-        fetch_result = get_temperatures(location, history_start, history_end, conn, settings)
+        fetch_result = get_temperatures(location, history_start, history_end, conn, settings.open_meteo)
         history = fetch_result.rows
 
         forecast_dates = [start_date + dt.timedelta(days=i) for i in range(horizon)]
@@ -94,7 +94,7 @@ def _run_fetch_history_sync(
 ) -> dict[str, Any]:
     with psycopg.connect(dsn) as conn:
         ensure_schema(conn)
-        fetch_result = get_temperatures(location, start_date, end_date, conn, settings)
+        fetch_result = get_temperatures(location, start_date, end_date, conn, settings.open_meteo)
     return {
         "cached_count": fetch_result.cached_count,
         "fetched_count": fetch_result.fetched_count,

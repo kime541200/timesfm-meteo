@@ -32,7 +32,14 @@ def list_forecasts(
     rows: list[ForecastRow] = fetch_forecasts_in_range(
         conn, location, start_date_from, start_date_to, horizon_step
     )
-    return [row._asdict() for row in rows]
+    return [
+        {
+            **row._asdict(),
+            "start_date": row.start_date.isoformat(),
+            "target_date": row.target_date.isoformat(),
+        }
+        for row in rows
+    ]
 
 
 class ForecastRequest(BaseModel):

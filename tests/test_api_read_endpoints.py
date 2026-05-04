@@ -10,6 +10,7 @@ pytest.importorskip("fastapi", reason="api extra not installed")
 
 from fastapi.testclient import TestClient
 
+from timesfm_meteo.data_sources.open_meteo import OpenMeteoError
 from timesfm_meteo.db.forecasts import ForecastRow
 from timesfm_meteo.models import DailyTemperature, EvaluationReport, GroupMetrics, Location
 from timesfm_meteo.pipeline.historical import FetchResult
@@ -77,6 +78,42 @@ def test_get_temperatures_invalid_longitude():
         headers=_AUTH,
     )
     assert resp.status_code == 422
+
+
+def test_get_temperatures_rejects_future_end_date():
+    client, _ = _make_client()
+    resp = client.get(
+        "/temperatures?latitude=25.05&longitude=121.57&start_date=2024-06-01&end_date=2999-01-01",
+        headers=_AUTH,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "end_date cannot be after today for historical temperatures"
+
+
+def test_get_temperatures_rejects_start_date_after_end_date():
+    client, _ = _make_client()
+    resp = client.get(
+        "/temperatures?latitude=25.05&longitude=121.57&start_date=2024-06-02&end_date=2024-06-01",
+        headers=_AUTH,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "start_date must be on or before end_date"
+
+
+def test_get_temperatures_wraps_open_meteo_error_as_bad_gateway():
+    client, _ = _make_client()
+
+    with patch(
+        "timesfm_meteo.api.routers.temperatures.get_temperatures",
+        side_effect=OpenMeteoError("Open-Meteo returned HTTP 400"),
+    ):
+        resp = client.get(
+            "/temperatures?latitude=25.05&longitude=121.57&start_date=2024-06-01&end_date=2024-06-01",
+            headers=_AUTH,
+        )
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "Open-Meteo returned HTTP 400"
 
 
 # ---------------------------------------------------------------------------

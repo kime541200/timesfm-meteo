@@ -57,6 +57,8 @@ def _build_archive_params(
 ) -> dict[str, str | float]:
     if start_date > end_date:
         raise ValueError("start_date must be less than or equal to end_date")
+    if end_date > Date.today():
+        raise ValueError("end_date must be less than or equal to today")
 
     resolved_settings = settings or OpenMeteoSettings()
     return {

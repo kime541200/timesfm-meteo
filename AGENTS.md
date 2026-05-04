@@ -72,6 +72,16 @@ AI Agent / 遠端呼叫用輕量 CLI client（只需 base install；設定 `.env
 uv run timesfm-meteo-client forecast run --latitude 25.05 --longitude 121.57 --horizon 3
 ```
 
+Web Dashboard（`web/`，React + Vite；需先啟動 API server，並設定 `web/.env.local` 中 `VITE_TIMESFM_API_KEY`）：
+
+```bash
+cd web
+npm install
+npm run dev
+npm test
+npm run build
+```
+
 早期實作順序：
 1. Open-Meteo 歷史每日資料 fetcher。
 2. TimesFM 輸入所需的 time-series 正規化。
@@ -88,6 +98,7 @@ Web client、Postgres 整合或 Polymarket 自動化。
 - `src/timesfm_meteo/cli.py`：CLI 入口（`timesfm-meteo`）。
 - `src/timesfm_meteo/api/`：FastAPI HTTP server（`[api]` extra）。
 - `src/timesfm_meteo/client/`：輕量 CLI client（`timesfm-meteo-client`，base install）。
+- `web/`：React + Vite Web Dashboard，透過 `/api/*` Vite proxy 呼叫 FastAPI。
 - `src/timesfm_meteo/configs.py`：讀取 `.env` 與 `configs/configs.yaml`，並以 Pydantic 驗證設定。
 - `src/timesfm_meteo/models.py`：核心資料結構。
 - `src/timesfm_meteo/db/`：Postgres repository（`repository.py`、`forecasts.py`、`jobs.py`）。

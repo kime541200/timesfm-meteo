@@ -94,17 +94,20 @@
 
 把服務用 Dockerfile、docker-compose 包裝。
 
-### 3. 數據可視化
+### 3. 數據可視化 (In Progress)
 
-提供一個 Web Dashboard，讓使用者能夠以視覺化方式檢視歷史氣溫、預測結果與評估指標，而不需要靠 stdout JSON 自己拼。
+提供一個 React + Vite Web Dashboard，讓使用者能夠以視覺化方式檢視歷史氣溫、過往預測結果、預測區間與評估指標，而不需要靠 stdout JSON 自己拼。
 
-預期方向：
-- 前端 Dashboard：歷史氣溫折線圖、未來 N 日預測（含 p10–p90 區間）、評估報表（依 horizon_step 分組的 MAE / coverage / interval width）。
-- 視覺化來源優先讀 Postgres，與 CLI 共用同一份資料表（`daily_temperatures`、`forecasts`），不重新發明儲存層。
-- 技術選型暫不鎖定，可依「中期 1. RESTful API Server」的成果決定（例如 FastAPI + 任一輕量前端，或單純 Streamlit / Plotly Dash 起步以縮短第一版時程）。
-- 第一版至少能切換地點與日期範圍；多地點 / alias 切換可等「地點 alias 與識別」落地後再補。
+目前實作方向（change: `add-web-client` + `fix-web-forecast-semantics`）：
+- 前端 Dashboard：歷史氣溫折線圖、過往 forecast p50 預測點 / 淡線、p10–p90 區間、聚合平均線。
+- 主圖以 `target_date` 為 X 軸；actual history 顯示到 `History end`，未來 forecast 由 `History end + 1 day` 開始接續。
+- `Forecast horizon` 與 `Evaluation horizon step` 明確拆開：前者控制 `Run Forecast` 未來天數，後者只影響過往 forecast analysis / evaluation。
+- 評估報表：overall summary cards + 依 horizon_step 分組的 MAE / coverage / interval width table。
+- 手動操作：Fetch History / Run Forecast 按鈕會呼叫 API server 建立 async job，並在 job 完成後自動 refetch 圖表與評估資料。
+- 技術選型：React + Vite + TypeScript、ECharts、TanStack Query、Vitest。
+- 第一版仍以 latitude / longitude 輸入，預設 Taipei；地點 alias 另列 Additional feature。
 
-依賴：建議在「中期 1. RESTful API Server」之後實作，避免前端直連 DB。
+依賴：使用「中期 1. RESTful API Server」提供的 `/api/*` endpoints；production 靜態檔 serve 與 Docker 包裝留到後續 change。
 
 ### 4. 每日自動更新與 Web Dashboard 整合
 

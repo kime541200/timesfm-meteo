@@ -8,6 +8,9 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 
+# Node.js-generated files
+node_modules/
+
 # Virtual environments
 .venv
 

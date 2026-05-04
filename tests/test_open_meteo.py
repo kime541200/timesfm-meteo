@@ -158,6 +158,15 @@ def test_fetch_daily_temperatures_rejects_start_date_after_end_date() -> None:
         )
 
 
+def test_fetch_daily_temperatures_rejects_future_end_date() -> None:
+    with pytest.raises(ValueError, match="today"):
+        fetch_daily_temperatures(
+            Location(latitude=25.0, longitude=121.5),
+            start_date=date(2024, 5, 1),
+            end_date=date(2999, 1, 1),
+        )
+
+
 def test_fetch_daily_temperatures_wraps_http_errors() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": True}, request=request)

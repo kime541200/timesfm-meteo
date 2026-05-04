@@ -222,7 +222,44 @@ uv run timesfm-meteo-client forecast run \
 
 詳細用法請見 [docs/cli-client.md](cli-client.md)。
 
-## 9. 跑測試
+## 9. Web Dashboard（選用）
+
+Web Dashboard 是人類使用者的視覺化介面，會透過 API server 讀取歷史氣溫、預測與評估資料。
+
+```bash
+# 1. 啟動 API server
+uv run --extra api --extra forecast uvicorn timesfm_meteo.api.app:app --port 8000
+
+# 2. 設定前端 env
+cp web/.env.example web/.env.local
+# 編輯 web/.env.local：VITE_TIMESFM_API_KEY 要等於 .env 裡的 API_KEY
+
+# 3. 啟動 Vite dev server
+cd web
+npm install
+npm run dev
+```
+
+前端呼叫 `/api/*`，由 Vite proxy 到 FastAPI server。`VITE_TIMESFM_API_KEY` 只適合本機 / private network，不能公開部署。
+
+Web Dashboard 的日期語意：
+
+- `History start` / `History end`：控制實際歷史資料的顯示與 `Fetch History` 的抓取區間。
+- `Forecast start`：固定為 `History end + 1 day`，不由使用者直接輸入。
+- `Forecast horizon`：`Run Forecast` 要往未來預測幾天。
+- `Evaluation horizon step`：只影響過往 forecast analysis 與 `GET /evaluate`，不會改變 `Run Forecast` 的未來天數。
+
+典型操作流程：
+
+1. 先調整 `History start` / `History end`，決定你要看的歷史區間。
+2. 點 `Apply filters` 載入 actual history、過往 forecasts 與 evaluation。
+3. 點 `Run Forecast` 後，前端會送出 `start_date = History end + 1 day` 與 `horizon = Forecast horizon`。
+4. 預測完成後，圖上應該看到 actual 線停在 `History end`，而未來 forecast 點接在後面。
+5. 若只想分析某個 lead time 的歷史表現，再調整 `Evaluation horizon step`。
+
+詳細說明請見 [web/README.md](../web/README.md)。
+
+## 10. 跑測試
 
 ```bash
 uv run --extra dev pytest
@@ -234,7 +271,7 @@ uv run --extra dev --extra forecast pytest
 
 DB 整合測試會在 `DATABASE_URL` 不存在時自動 skip。
 
-## 10. 故障排除
+## 11. 故障排除
 
 - **`could not connect to server`**：確認 `docker compose -f docker-compose.postgres.yml ps` 服務有起來，且 `.env` 中 `DATABASE_URL` 帳密／資料庫名與 `.env.postgres` 一致。
 - **第一次 `forecast` 卡很久**：首次會下載 TimesFM checkpoint（數百 MB）；可由 `HF_HOME` 觀察下載位置。
