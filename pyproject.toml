@@ -16,13 +16,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "respx>=0.22",
 ]
 forecast = [
     "timesfm[torch] @ git+https://github.com/google-research/timesfm.git",
 ]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "psycopg-pool>=3.2",
+]
 
 [project.scripts]
 timesfm-meteo = "timesfm_meteo.cli:main"
+timesfm-meteo-client = "timesfm_meteo.client.cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]

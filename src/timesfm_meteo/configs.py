@@ -82,6 +82,17 @@ class PostgresSettings(BaseModel):
     )
 
 
+class ApiSettings(BaseModel):
+    """HTTP API server settings."""
+
+    model_config = ConfigDict(frozen=True)
+
+    api_key: str = Field(
+        default_factory=lambda: os.environ.get("API_KEY", ""),
+        description="Bearer token for API authentication (set API_KEY in .env)",
+    )
+
+
 class Settings(BaseModel):
     """Runtime settings for the local forecasting pipeline."""
 
@@ -95,6 +106,7 @@ class Settings(BaseModel):
     )
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     timesfm: TimesFMSettings = Field(default_factory=TimesFMSettings)
+    api: ApiSettings = Field(default_factory=ApiSettings)
 
 
 def load_settings(

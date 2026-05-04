@@ -17,11 +17,14 @@
 git clone <this-repo>
 cd timesfm-meteo
 
-# 基本依賴（fetch-history、evaluate 已可用）
+# 基本依賴（fetch-history、evaluate、CLI client 已可用）
 uv sync
 
 # 預測指令需要額外安裝 forecast extra（含 timesfm + torch）
 uv sync --extra forecast
+
+# API server 需要 api extra
+uv sync --extra api
 
 # 開發依賴（pytest）
 uv sync --extra dev
@@ -191,17 +194,47 @@ evaluated=3 pending=0 horizon_step=any
 
 stdout 為 `EvaluationReport` JSON，可直接 pipe 給 `jq`、`python -m json.tool` 觀察。
 
-## 7. 跑測試
+## 7. API Server（選用）
+
+API server 將 pipeline 包裝成 HTTP endpoints，供 Web Dashboard 或 AI Agent 遠端呼叫。
+
+```bash
+# 安裝 api extra（需要同時安裝 forecast 才能跑預測）
+uv sync --extra api --extra forecast
+
+# 在 .env 中設定 API_KEY（參見 .env.example）
+
+# 啟動
+uv run uvicorn timesfm_meteo.api.app:app --host 0.0.0.0 --port 8000
+```
+
+詳細 endpoint 說明請見 [docs/api-server.md](api-server.md)。
+
+## 8. CLI Client（選用）
+
+對 API server 發 HTTP request 的輕量 CLI，適合 AI Agent 使用：
+
+```bash
+# 在 .env 中設定 TIMESFM_API_URL / TIMESFM_API_KEY
+uv run timesfm-meteo-client forecast run \
+  --latitude 25.05 --longitude 121.57 --horizon 3
+```
+
+詳細用法請見 [docs/cli-client.md](cli-client.md)。
+
+## 9. 跑測試
 
 ```bash
 uv run --extra dev pytest
-# 若想包含預測相關測試
+# 含 API 測試
+uv run --extra dev --extra api pytest
+# 含預測相關測試（需 forecast extra）
 uv run --extra dev --extra forecast pytest
 ```
 
 DB 整合測試會在 `DATABASE_URL` 不存在時自動 skip。
 
-## 8. 故障排除
+## 10. 故障排除
 
 - **`could not connect to server`**：確認 `docker compose -f docker-compose.postgres.yml ps` 服務有起來，且 `.env` 中 `DATABASE_URL` 帳密／資料庫名與 `.env.postgres` 一致。
 - **第一次 `forecast` 卡很久**：首次會下載 TimesFM checkpoint（數百 MB）；可由 `HF_HOME` 觀察下載位置。

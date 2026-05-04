@@ -15,8 +15,14 @@
 
 ## 目前狀態
 
-此 repository 仍在規劃與 skeleton 階段。src-layout 骨架已建立，Open-Meteo
-歷史氣溫資料抓取已可用，預測 pipeline 尚未實作。
+MVP pipeline 已完整可用：Open-Meteo 歷史氣溫抓取（Postgres 快取）、TimesFM 分位數預測、
+評估（MAE / interval coverage / interval width）。
+
+中期功能陸續加入：REST API server（FastAPI）、輕量 CLI client（供 AI Agent 使用）。
+
+- API server 操作：[docs/api-server.md](docs/api-server.md)
+- CLI client 操作：[docs/cli-client.md](docs/cli-client.md)
+- 完整使用說明：[docs/usage.md](docs/usage.md)
 
 ## Configuration
 

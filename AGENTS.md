@@ -21,13 +21,14 @@ uv sync
 ```
 
 runtime 依賴目前包含 `httpx`、`psycopg`、`pydantic`、`python-dotenv`、`PyYAML`；
-dev extra 包含 `pytest`；`forecast` extra 包含 `timesfm[torch]` 與 `numpy`。
+dev extra 包含 `pytest` 與 `respx`；`forecast` extra 包含 `timesfm[torch]` 與 `numpy`；
+`api` extra 包含 `fastapi`、`uvicorn[standard]`、`psycopg-pool`。
 若任務需要新增依賴，請加到 `pyproject.toml`，並讓改動維持在該任務所需範圍內。
 
-執行 `forecast` 子命令需要額外安裝 forecast extra：
-
 ```bash
-uv sync --extra forecast
+uv sync --extra forecast   # 執行 forecast 子命令
+uv sync --extra api        # 啟動 API server
+uv sync --extra dev        # pytest
 ```
 
 ## Development
@@ -59,6 +60,18 @@ uv run timesfm-meteo evaluate --latitude 25.05 --longitude 121.57 \
     --start-date-from 2024-06-01 --start-date-to 2024-06-30
 ```
 
+啟動 API server（需要先 `uv sync --extra api --extra forecast`；同時設定 `.env` 中 `API_KEY`）：
+
+```bash
+uv run uvicorn timesfm_meteo.api.app:app --host 0.0.0.0 --port 8000
+```
+
+AI Agent / 遠端呼叫用輕量 CLI client（只需 base install；設定 `.env` 中 `TIMESFM_API_URL` / `TIMESFM_API_KEY`）：
+
+```bash
+uv run timesfm-meteo-client forecast run --latitude 25.05 --longitude 121.57 --horizon 3
+```
+
 早期實作順序：
 1. Open-Meteo 歷史每日資料 fetcher。
 2. TimesFM 輸入所需的 time-series 正規化。
@@ -72,10 +85,14 @@ Web client、Postgres 整合或 Polymarket 自動化。
 
 - `main.py`：repo 根目錄的薄入口，只呼叫 `timesfm_meteo.cli.main`，不要放核心邏輯。
 - `src/timesfm_meteo/`：可匯入的核心 Python package。
-- `src/timesfm_meteo/cli.py`：CLI 入口。
+- `src/timesfm_meteo/cli.py`：CLI 入口（`timesfm-meteo`）。
+- `src/timesfm_meteo/api/`：FastAPI HTTP server（`[api]` extra）。
+- `src/timesfm_meteo/client/`：輕量 CLI client（`timesfm-meteo-client`，base install）。
 - `src/timesfm_meteo/configs.py`：讀取 `.env` 與 `configs/configs.yaml`，並以 Pydantic 驗證設定。
 - `src/timesfm_meteo/models.py`：核心資料結構。
+- `src/timesfm_meteo/db/`：Postgres repository（`repository.py`、`forecasts.py`、`jobs.py`）。
 - `src/timesfm_meteo/data_sources/`：外部資料來源，例如 Open-Meteo。
+- `src/timesfm_meteo/inference/`：TimesFM engine（`ForecastEngine` Protocol、`TimesFMEngine`）。
 - `src/timesfm_meteo/forecasting/`：TimesFM adapter 與 baseline forecast。
 - `src/timesfm_meteo/pipeline/`：資料抓取、預測與評估的 orchestration。
 - `src/timesfm_meteo/evaluation/`：回測與評估指標。
@@ -84,6 +101,8 @@ Web client、Postgres 整合或 Polymarket 自動化。
 - `configs/configs.yaml`：本機 runtime 設定，預設由 `load_settings()` 讀取，不應提交。
 - `pyproject.toml`：Python 專案 metadata 與依賴設定。
 - `docs/roadmap.md`：專案目標與分階段規劃。
+- `docs/api-server.md`：API server endpoint 規格與部署說明。
+- `docs/cli-client.md`：CLI client 操作說明（含 AI Agent 使用情境）。
 - `docs/quantile-forecasting.md`：分位數預測與不確定性說明。
 
 ## Code Style

@@ -74,17 +74,21 @@
 
 ## 中期
 
-### 1. RESTful API Server
+### 1. RESTful API Server (Done)
 
-等 MVP pipeline 可用後，再建立 server-client 架構。
+把 MVP pipeline 包裝成 HTTP API，供 Web Dashboard、AI Agent、未來排程器使用。
 
-預期方向：
-- Python + FastAPI server。
-- Server 端 Auth flow。
-- Python CLI client。
-- Web client，可能使用 Node.js 工具鏈。
+實際交付：
+- FastAPI server（`src/timesfm_meteo/api/`），啟動時透過 lifespan 載入 TimesFM 模型並常駐記憶體。
+- Endpoints：
+  - 讀：`GET /temperatures`、`GET /forecasts`、`GET /evaluate`
+  - 觸發（async job + Postgres `jobs` 表）：`POST /forecast`、`POST /fetch-history`
+  - Job 狀態：`GET /jobs/{id}`
+- API Key auth（`Authorization: Bearer <key>`，從 `.env` 讀 `API_KEY`）。
+- 輕量 CLI client `timesfm-meteo-client`（`src/timesfm_meteo/client/`），AI Agent 友善，只依賴 `httpx` + `pydantic`，不需 DB / 模型即可呼叫遠端 API。
+- 文件：`docs/api-server.md`、`docs/cli-client.md`，並補進 `docs/usage.md` 與 `AGENTS.md`。
 
-API 應包裝既有資料與預測 pipeline，而不是反過來由 API 先定義 pipeline。
+> Web client（前端 SPA）獨立成「中期 3. 數據可視化」這個 change，避免 Python / Node 兩套工具鏈擠在同一個 change。
 
 ### 2. Docker 包裝服務
 
