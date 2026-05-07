@@ -27,3 +27,9 @@ servers.json
 # Model cache and logs
 hub/
 xet/
+
+# Claude Code
+.claude/
+
+# Codex
+.codex/
